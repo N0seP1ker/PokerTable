@@ -5,13 +5,16 @@ A lightweight online poker site for up to 10 players. Inspired by PokerNow, but 
 ## Features
 - Login via main page or direct room link.
 - Host can configure (all these take effect on the next round):
-  - Small/Big blind
+  - Small/big blind
   - Ante toggle
   - Straddle toggle
   - Run it twice: always | ask | not allowed
   - Decision timer: 20s | 40s
-- Players can claim one of 10 seats.
+  - Seats: player's choice | randomly assigned
 - Host starts the game; table shows cards, pot, chips, action buttons.
+- Host can pause the game, or terminate it
+- Host can approve players' requests to sit down with a given stack, and remove or add chips to their stack
+- 
 
 ## Tech Stack (planned)
 - **Frontend**: React/Next.js, Tailwind (mobile-first design).
