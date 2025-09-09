@@ -1,4 +1,4 @@
-# PokerTable Lite
+# PokerTable
 A lightweight online poker site for up to 10 players. Inspired by PokerNow, but only with the necessary features to play with friends.
 
 ## Features

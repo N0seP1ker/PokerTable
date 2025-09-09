@@ -72,7 +72,7 @@ const RoomPage: React.FC = () => {
       setRoom(prev => prev ? { ...prev, settings } : null)
     })
 
-    socket.on('game_started', (gameState) => {
+    socket.on('game_started', (_gameState) => {
       navigate(`/table/${roomId}`)
     })
 
@@ -129,7 +129,14 @@ const RoomPage: React.FC = () => {
       <div className="container">
         <div className="card">
           <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-            <p>Loading room...</p>
+            <p>Room not found or you haven't joined yet.</p>
+            <button 
+              className="btn btn-primary" 
+              onClick={() => navigate(`/?room=${roomId}`)}
+              style={{ marginTop: '16px' }}
+            >
+              Go to Landing Page to Join
+            </button>
           </div>
         </div>
       </div>

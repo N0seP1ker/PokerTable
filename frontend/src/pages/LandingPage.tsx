@@ -26,12 +26,12 @@ const LandingPage: React.FC = () => {
   React.useEffect(() => {
     if (!socket) return
 
-    socket.on('room_created', (room, playerId) => {
+    socket.on('room_created', (room, _playerId) => {
       setLoading(false)
       navigate(`/room/${room.id}`)
     })
 
-    socket.on('room_joined', (room, playerId) => {
+    socket.on('room_joined', (room, _playerId) => {
       setLoading(false)
       navigate(`/room/${room.id}`)
     })
