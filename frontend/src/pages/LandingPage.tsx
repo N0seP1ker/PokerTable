@@ -1,29 +1,38 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useSocket } from '../hooks/useSocket'
+import './LandingPage.css'
 
 const LandingPage: React.FC = () => {
   const [playerName, setPlayerName] = useState('')
-  const [roomId, setRoomId] = useState('')
-  const [roomName, setRoomName] = useState('')
-  const [isCreating, setIsCreating] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  
+
   const { socket } = useSocket()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  
-  // Check if there's a room ID in the URL (direct link to room)
-  React.useEffect(() => {
-    const urlRoomId = searchParams.get('room')
-    if (urlRoomId) {
-      setRoomId(urlRoomId)
-      setIsCreating(false)
-    }
-  }, [searchParams])
 
-  React.useEffect(() => {
+  // Check for saved player name in localStorage
+  useEffect(() => {
+    const savedName = localStorage.getItem('pokerPlayerName')
+    if (savedName) {
+      setPlayerName(savedName)
+    }
+  }, [])
+
+  // Check if there's a room ID in the URL (direct link to room)
+  useEffect(() => {
+    const urlRoomId = searchParams.get('room')
+    const savedName = localStorage.getItem('pokerPlayerName')
+
+    // If there's a room in URL and we have a saved name, auto-join
+    if (urlRoomId && savedName && socket) {
+      setLoading(true)
+      socket.emit('join_room', urlRoomId, savedName)
+    }
+  }, [searchParams, socket])
+
+  useEffect(() => {
     if (!socket) return
 
     socket.on('room_created', (room, _playerId) => {
@@ -48,124 +57,94 @@ const LandingPage: React.FC = () => {
     }
   }, [socket, navigate])
 
-  const handleCreateRoom = () => {
-    if (!socket || !playerName.trim() || !roomName.trim()) {
-      setError('Please fill in all fields')
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!socket || !playerName.trim()) {
+      setError('Please enter your name')
       return
     }
 
+    const trimmedName = playerName.trim()
+
+    // Save player name to localStorage for persistence
+    localStorage.setItem('pokerPlayerName', trimmedName)
+
     setLoading(true)
     setError('')
-    socket.emit('create_room', roomName.trim(), playerName.trim())
+
+    // Check if joining existing room or creating new one
+    const urlRoomId = searchParams.get('room')
+    if (urlRoomId) {
+      socket.emit('join_room', urlRoomId, trimmedName)
+    } else {
+      // Auto-create a room with the player's name
+      const roomName = `${trimmedName}'s Room`
+      socket.emit('create_room', roomName, trimmedName)
+    }
   }
 
-  const handleJoinRoom = () => {
-    if (!socket || !playerName.trim() || !roomId.trim()) {
-      setError('Please fill in all fields')
-      return
-    }
-
-    setLoading(true)
-    setError('')
-    socket.emit('join_room', roomId.trim(), playerName.trim())
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPlayerName(e.target.value)
+    if (error) setError('')
   }
 
   return (
-    <div className="container">
-      <div className="title">
-        <h1>Friendly PokerTable</h1>
-        <p>Play Texas Hold'em with friends</p>
-      </div>
-
-      <div className="card">
-        {error && (
-          <div className="error-message">
-            {error}
-          </div>
-        )}
-
-        <div className="form-group">
-          <label htmlFor="playerName">Your Name</label>
-          <input
-            id="playerName"
-            type="text"
-            value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            placeholder="Enter your name"
-            maxLength={20}
-          />
+    <div className="landing-page">
+      <div className="landing-container">
+        {/* Logo/Title */}
+        <div className="landing-header">
+          <h1 className="landing-title">
+            🃏<br />
+            Friendly Poker
+          </h1>
+          <p className="landing-subtitle">Play Texas Hold'em with friends</p>
         </div>
 
-        <div style={{ marginBottom: '24px' }}>
-          <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
-            <button
-              className={`btn ${!isCreating ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setIsCreating(false)}
-              style={{ flex: 1 }}
-            >
-              Join Room
-            </button>
-            <button
-              className={`btn ${isCreating ? 'btn-primary' : 'btn-secondary'}`}
-              onClick={() => setIsCreating(true)}
-              style={{ flex: 1 }}
-            >
-              Create Room
-            </button>
-          </div>
-
-          {isCreating ? (
-            <>
-              <div className="form-group">
-                <label htmlFor="roomName">Room Name</label>
-                <input
-                  id="roomName"
-                  type="text"
-                  value={roomName}
-                  onChange={(e) => setRoomName(e.target.value)}
-                  placeholder="Enter room name"
-                  maxLength={30}
-                />
-              </div>
-              <button
-                className="btn btn-primary"
-                onClick={handleCreateRoom}
-                disabled={loading || !playerName.trim() || !roomName.trim()}
-              >
-                {loading ? 'Creating...' : 'Create & Join Room'}
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="form-group">
-                <label htmlFor="roomId">Room ID</label>
-                <input
-                  id="roomId"
-                  type="text"
-                  value={roomId}
-                  onChange={(e) => setRoomId(e.target.value)}
-                  placeholder="Enter room ID"
-                />
-              </div>
-              <button
-                className="btn btn-primary"
-                onClick={handleJoinRoom}
-                disabled={loading || !playerName.trim() || !roomId.trim()}
-              >
-                {loading ? 'Joining...' : 'Join Room'}
-              </button>
-            </>
+        {/* Name Input Form */}
+        <form onSubmit={handleSubmit} className="landing-form">
+          {error && (
+            <div className="landing-error">
+              {error}
+            </div>
           )}
-        </div>
 
-        <div style={{ 
-          textAlign: 'center', 
-          fontSize: '14px', 
-          color: '#9ca3af',
-          lineHeight: '1.5'
-        }}>
-          <p>Share room links with friends to play together</p>
-          <p>Up to 10 players • Mobile optimized</p>
+          <div className="input-container">
+            <input
+              type="text"
+              value={playerName}
+              onChange={handleNameChange}
+              placeholder="Enter your name"
+              maxLength={20}
+              className="landing-input"
+              autoFocus
+              disabled={loading}
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="landing-button"
+            disabled={loading || !playerName.trim()}
+          >
+            {loading ? (
+              <span className="loading-spinner">⏳</span>
+            ) : (
+              searchParams.get('room') ? 'Join Room' : 'Create Room'
+            )}
+          </button>
+
+          <p className="landing-hint">
+            {searchParams.get('room')
+              ? 'You\'ve been invited to a poker room'
+              : 'A new room will be created for you'}
+          </p>
+        </form>
+
+        {/* Footer Info */}
+        <div className="landing-footer">
+          <p>• Up to 10 players</p>
+          <p>• Mobile & Desktop friendly</p>
         </div>
       </div>
     </div>

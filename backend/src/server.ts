@@ -63,24 +63,25 @@ io.on('connection', (socket) => {
   socket.on('create_room', (roomName: string, playerName: string) => {
     const roomId = uuidv4();
     const playerId = socket.id;
-    
+
     const player: Player = {
       id: playerId,
       name: playerName,
+      privilege: 'owner',
       isHost: true,
       isConnected: true
     };
 
     const room = createRoom(roomId, roomName, playerId);
     room.players.push(player);
-    
+
     rooms.set(roomId, room);
     playerRooms.set(playerId, roomId);
-    
+
     socket.join(roomId);
     socket.emit('room_created', room, playerId);
-    
-    console.log(`Room created: ${roomId} by ${playerName}`);
+
+    console.log(`Room created: ${roomId} by ${playerName} (owner)`);
   });
 
   // Join an existing room
@@ -101,18 +102,19 @@ io.on('connection', (socket) => {
     const player: Player = {
       id: playerId,
       name: playerName,
+      privilege: 'player',
       isHost: false,
       isConnected: true
     };
 
     room.players.push(player);
     playerRooms.set(playerId, roomId);
-    
+
     socket.join(roomId);
     socket.emit('room_joined', room, playerId);
     socket.to(roomId).emit('player_joined', player);
-    
-    console.log(`Player ${playerName} joined room ${roomId}`);
+
+    console.log(`Player ${playerName} joined room ${roomId} (player)`);
   });
 
   // Claim a seat

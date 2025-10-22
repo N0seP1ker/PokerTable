@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python test_poker_comprehensive.py)",
+      "Bash(python:*)",
+      "Bash(mkdir:*)",
+      "Bash(npm install)",
+      "Bash(test:*)",
+      "Bash(cat:*)",
+      "Bash(awk '{print $9}')"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

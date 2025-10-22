@@ -1,7 +1,10 @@
+export type PlayerPrivilege = 'owner' | 'player';
+
 export interface Player {
   id: string;
   name: string;
-  isHost: boolean;
+  privilege: PlayerPrivilege;
+  isHost: boolean; // Kept for backwards compatibility
   seatPosition?: number;
   chips?: number;
   isConnected: boolean;
