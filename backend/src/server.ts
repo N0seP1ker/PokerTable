@@ -20,6 +20,10 @@ app.use(express.json());
 // In-memory storage (replace with database in production)
 const rooms = new Map<string, Room>();
 const playerRooms = new Map<string, string>(); // playerId -> roomId
+const deviceToPlayer = new Map<string, { playerId: string, roomId: string }>(); // deviceId -> player mapping
+
+// Reconnection timeout: 5 minutes
+const RECONNECTION_TIMEOUT = 5 * 60 * 1000;
 
 // Helper functions
 function createEmptySeats(): Seat[] {
@@ -60,7 +64,7 @@ io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
   // Create a new room
-  socket.on('create_room', (roomName: string, playerName: string) => {
+  socket.on('create_room', (roomName: string, playerName: string, deviceId?: string) => {
     const roomId = uuidv4();
     const playerId = socket.id;
 
@@ -69,7 +73,9 @@ io.on('connection', (socket) => {
       name: playerName,
       privilege: 'owner',
       isHost: true,
-      isConnected: true
+      isConnected: true,
+      deviceId: deviceId,
+      lastSeen: Date.now()
     };
 
     const room = createRoom(roomId, roomName, playerId);
@@ -78,6 +84,11 @@ io.on('connection', (socket) => {
     rooms.set(roomId, room);
     playerRooms.set(playerId, roomId);
 
+    // Track device for reconnection
+    if (deviceId) {
+      deviceToPlayer.set(deviceId, { playerId, roomId });
+    }
+
     socket.join(roomId);
     socket.emit('room_created', room, playerId);
 
@@ -85,13 +96,66 @@ io.on('connection', (socket) => {
   });
 
   // Join an existing room
-  socket.on('join_room', (roomId: string, playerName: string) => {
+  socket.on('join_room', (roomId: string, playerName: string, deviceId?: string) => {
     const room = rooms.get(roomId);
     const playerId = socket.id;
 
     if (!room) {
       socket.emit('error', 'Room not found');
       return;
+    }
+
+    // Check for reconnection - same device trying to rejoin
+    if (deviceId) {
+      const existingMapping = deviceToPlayer.get(deviceId);
+
+      if (existingMapping && existingMapping.roomId === roomId) {
+        const existingPlayer = room.players.find(p => p.deviceId === deviceId);
+
+        if (existingPlayer) {
+          const timeSinceDisconnect = Date.now() - (existingPlayer.lastSeen || 0);
+
+          // Allow reconnection within timeout period
+          if (timeSinceDisconnect < RECONNECTION_TIMEOUT) {
+            // Check if name matches - allow same device to use same name
+            if (existingPlayer.name === playerName) {
+              // Update player with new socket ID
+              const oldPlayerId = existingPlayer.id;
+              existingPlayer.id = playerId;
+              existingPlayer.isConnected = true;
+              existingPlayer.lastSeen = Date.now();
+
+              // Update mappings
+              playerRooms.delete(oldPlayerId);
+              playerRooms.set(playerId, roomId);
+              deviceToPlayer.set(deviceId, { playerId, roomId });
+
+              // Update seat if player was seated
+              const seat = room.seats.find(s => s.player?.id === oldPlayerId);
+              if (seat && seat.player) {
+                seat.player.id = playerId;
+              }
+
+              socket.join(roomId);
+              socket.emit('room_joined', room, playerId);
+              socket.to(roomId).emit('player_reconnected', existingPlayer);
+
+              console.log(`Player ${playerName} reconnected to room ${roomId} (kept seat and chips)`);
+              return;
+            } else {
+              socket.emit('error', `This device was previously "${existingPlayer.name}". Please use the same name to reconnect.`);
+              return;
+            }
+          }
+        }
+      }
+
+      // Check for duplicate names (different devices)
+      const duplicateName = room.players.find(p => p.name === playerName && p.deviceId !== deviceId);
+      if (duplicateName) {
+        socket.emit('error', 'A player with this name is already in the room');
+        return;
+      }
     }
 
     if (room.players.length >= room.maxPlayers) {
@@ -104,11 +168,18 @@ io.on('connection', (socket) => {
       name: playerName,
       privilege: 'player',
       isHost: false,
-      isConnected: true
+      isConnected: true,
+      deviceId: deviceId,
+      lastSeen: Date.now()
     };
 
     room.players.push(player);
     playerRooms.set(playerId, roomId);
+
+    // Track device for reconnection
+    if (deviceId) {
+      deviceToPlayer.set(deviceId, { playerId, roomId });
+    }
 
     socket.join(roomId);
     socket.emit('room_joined', room, playerId);
@@ -295,24 +366,73 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     const playerId = socket.id;
     const roomId = playerRooms.get(playerId);
-    
+
     if (roomId) {
       const room = rooms.get(roomId);
       if (room) {
-        // Mark player as disconnected
         const player = room.players.find(p => p.id === playerId);
         if (player) {
+          // Mark player as disconnected but keep in room for reconnection
           player.isConnected = false;
+          player.lastSeen = Date.now();
           socket.to(roomId).emit('player_left', playerId);
-          
-          // TODO: Handle host disconnection
-          // TODO: Implement reconnection logic
+
+          console.log(`Player ${player.name} disconnected from room ${roomId} (can reconnect within ${RECONNECTION_TIMEOUT / 1000}s)`);
+
+          // Set timeout to remove player if they don't reconnect
+          setTimeout(() => {
+            const currentRoom = rooms.get(roomId);
+            if (currentRoom) {
+              const currentPlayer = currentRoom.players.find(p => p.deviceId === player.deviceId);
+
+              // Only remove if still disconnected after timeout
+              if (currentPlayer && !currentPlayer.isConnected) {
+                const timeSinceDisconnect = Date.now() - (currentPlayer.lastSeen || 0);
+
+                if (timeSinceDisconnect >= RECONNECTION_TIMEOUT) {
+                  // Remove player from room
+                  currentRoom.players = currentRoom.players.filter(p => p.id !== currentPlayer.id);
+
+                  // Release their seat if they had one
+                  const seat = currentRoom.seats.find(s => s.player?.id === currentPlayer.id);
+                  if (seat) {
+                    seat.player = null;
+                    seat.isEmpty = true;
+                    io.to(roomId).emit('seat_released', seat.position);
+                  }
+
+                  // Clean up mappings
+                  if (player.deviceId) {
+                    deviceToPlayer.delete(player.deviceId);
+                  }
+                  playerRooms.delete(currentPlayer.id);
+
+                  // Handle host disconnection
+                  if (currentRoom.hostId === currentPlayer.id && currentRoom.players.length > 0) {
+                    // Transfer host to next player
+                    const newHost = currentRoom.players[0];
+                    currentRoom.hostId = newHost.id;
+                    newHost.privilege = 'owner';
+                    newHost.isHost = true;
+                    io.to(roomId).emit('settings_updated', currentRoom.settings); // Notify of host change
+                    console.log(`Host transferred to ${newHost.name} in room ${roomId}`);
+                  }
+
+                  // Delete room if empty
+                  if (currentRoom.players.length === 0) {
+                    rooms.delete(roomId);
+                    console.log(`Room ${roomId} deleted (empty)`);
+                  }
+
+                  console.log(`Player ${player.name} permanently removed from room ${roomId} (timeout)`);
+                }
+              }
+            }
+          }, RECONNECTION_TIMEOUT);
         }
       }
-      
-      playerRooms.delete(playerId);
     }
-    
+
     console.log('User disconnected:', playerId);
   });
 });

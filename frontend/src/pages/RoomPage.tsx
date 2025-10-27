@@ -51,16 +51,23 @@ const RoomPage: React.FC = () => {
       const leavingPlayer = room?.players.find(p => p.id === playerId)
       setRoom(prev => prev ? {
         ...prev,
-        players: prev.players.filter(p => p.id !== playerId),
-        seats: prev.seats.map(seat =>
-          seat.player?.id === playerId
-            ? { ...seat, player: null, isEmpty: true }
-            : seat
+        players: prev.players.map(p =>
+          p.id === playerId ? { ...p, isConnected: false } : p
         )
       } : null)
       if (leavingPlayer) {
-        addSystemMessage(`${leavingPlayer.name} left the room`)
+        addSystemMessage(`${leavingPlayer.name} disconnected (can reconnect)`)
       }
+    })
+
+    socket.on('player_reconnected', (player: Player) => {
+      setRoom(prev => prev ? {
+        ...prev,
+        players: prev.players.map(p =>
+          p.deviceId === player.deviceId ? player : p
+        )
+      } : null)
+      addSystemMessage(`${player.name} reconnected`)
     })
 
     socket.on('seat_claimed', (seatPosition: number, player: Player) => {
@@ -108,6 +115,7 @@ const RoomPage: React.FC = () => {
       socket.off('room_created')
       socket.off('player_joined')
       socket.off('player_left')
+      socket.off('player_reconnected')
       socket.off('seat_claimed')
       socket.off('seat_released')
       socket.off('settings_updated')

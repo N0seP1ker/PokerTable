@@ -1,16 +1,23 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useSocket } from '../hooks/useSocket'
+import { getDeviceFingerprint } from '../utils/deviceFingerprint'
 import './LandingPage.css'
 
 const LandingPage: React.FC = () => {
   const [playerName, setPlayerName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [deviceId, setDeviceId] = useState<string>('')
 
   const { socket } = useSocket()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+
+  // Get device fingerprint on mount
+  useEffect(() => {
+    getDeviceFingerprint().then(setDeviceId)
+  }, [])
 
   // Check for saved player name in localStorage
   useEffect(() => {
@@ -26,11 +33,11 @@ const LandingPage: React.FC = () => {
     const savedName = localStorage.getItem('pokerPlayerName')
 
     // If there's a room in URL and we have a saved name, auto-join
-    if (urlRoomId && savedName && socket) {
+    if (urlRoomId && savedName && socket && deviceId) {
       setLoading(true)
-      socket.emit('join_room', urlRoomId, savedName)
+      socket.emit('join_room', urlRoomId, savedName, deviceId)
     }
-  }, [searchParams, socket])
+  }, [searchParams, socket, deviceId])
 
   useEffect(() => {
     if (!socket) return
@@ -57,7 +64,7 @@ const LandingPage: React.FC = () => {
     }
   }, [socket, navigate])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!socket || !playerName.trim()) {
@@ -73,14 +80,20 @@ const LandingPage: React.FC = () => {
     setLoading(true)
     setError('')
 
+    // Ensure we have device ID
+    const currentDeviceId = deviceId || await getDeviceFingerprint()
+    if (!deviceId) {
+      setDeviceId(currentDeviceId)
+    }
+
     // Check if joining existing room or creating new one
     const urlRoomId = searchParams.get('room')
     if (urlRoomId) {
-      socket.emit('join_room', urlRoomId, trimmedName)
+      socket.emit('join_room', urlRoomId, trimmedName, currentDeviceId)
     } else {
       // Auto-create a room with the player's name
       const roomName = `${trimmedName}'s Room`
-      socket.emit('create_room', roomName, trimmedName)
+      socket.emit('create_room', roomName, trimmedName, currentDeviceId)
     }
   }
 

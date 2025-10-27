@@ -8,6 +8,8 @@ export interface Player {
   seatPosition?: number;
   chips?: number;
   isConnected: boolean;
+  deviceId?: string; // For reconnection logic
+  lastSeen?: number; // Timestamp for timeout logic
 }
 
 export interface TableSettings {
@@ -65,19 +67,20 @@ export interface PlayerAction {
 
 export interface SocketEvents {
   // Client to Server
-  join_room: (roomId: string, playerName: string) => void;
-  create_room: (roomName: string, playerName: string) => void;
+  join_room: (roomId: string, playerName: string, deviceId?: string) => void;
+  create_room: (roomName: string, playerName: string, deviceId?: string) => void;
   claim_seat: (seatPosition: number) => void;
   leave_seat: () => void;
   update_settings: (settings: Partial<TableSettings>) => void;
   start_game: () => void;
   player_action: (action: PlayerAction) => void;
-  
+
   // Server to Client
   room_joined: (room: Room, playerId: string) => void;
   room_created: (room: Room, playerId: string) => void;
   player_joined: (player: Player) => void;
   player_left: (playerId: string) => void;
+  player_reconnected: (player: Player) => void;
   seat_claimed: (seatPosition: number, player: Player) => void;
   seat_released: (seatPosition: number) => void;
   settings_updated: (settings: TableSettings) => void;

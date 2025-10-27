@@ -3,6 +3,9 @@ A lightweight online poker site for up to 10 players. Inspired by PokerNow, but 
 
 ## Features
 - Login via main page or direct room link.
+- **Automatic Reconnection**: If you disconnect (network issue, browser refresh, etc.), you can rejoin with the same name and keep your seat and chips for up to 5 minutes.
+- **Device Recognition**: The same device can always use the same username when reconnecting to a room.
+- **Duplicate Name Protection**: Different devices cannot use the same name in the same room.
 - Host can configure (all these take effect on the next round):
   - Small/Big blind
   - Ante toggle
@@ -12,6 +15,7 @@ A lightweight online poker site for up to 10 players. Inspired by PokerNow, but 
   - Seats: players choice | randomly assigned
 - Host starts the game; table shows cards, pot, chips, action buttons.
 - Host can pause the game, or terminate it.
+- **Automatic Host Transfer**: If the host disconnects permanently, host privileges transfer to the next player.
 - Host can approve players' request to sit down with a given stack, and remove or add chips to their stack.
 - All users can access a chatting interface with about 200 messages of history that is stored during the session.
 - All users can access and download a game log of everyone's buy-in and buy-out and current stack.
@@ -60,17 +64,27 @@ Your browser will open automatically to `http://localhost:3000`
 ✅ Responsive design (desktop & mobile)
 ✅ SVG card rendering (52 cards)
 ✅ Complete Python poker engine with hand evaluation
-✅ Comprehensive test suite
+✅ **Automatic reconnection system** - players keep their seat, chips, and can rejoin with the same name
+✅ Device fingerprinting for persistent player identity
 
 ---
 
-## 🧪 Run Tests
+## 🔄 Reconnection System
 
-```bash
-python test_poker_comprehensive.py
-```
+The app uses device fingerprinting to identify players across sessions:
 
-Tests all poker hand rankings, betting logic, and game flow.
+- **Automatic**: Players who disconnect can rejoin within 5 minutes by entering the same name
+- **Preserves State**: Keeps seat position, chip count, and game state
+- **Device-Based**: Same device = same player identity (works across browser refreshes)
+- **Name Protection**: Prevents other devices from stealing your username in a room
+- **Visual Feedback**: Other players see "disconnected (can reconnect)" when someone drops
+
+**How it works:**
+1. Each device gets a unique fingerprint on first visit
+2. When joining a room, device ID + name is registered
+3. On disconnect, player stays in room for 5 minutes
+4. On rejoin with same name from same device, all data is restored
+5. After 5 minutes, the seat is freed for others
 
 ---
 
